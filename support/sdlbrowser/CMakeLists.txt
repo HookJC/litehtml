@@ -76,4 +76,7 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(sdlbrowser PRIVATE -Wall -Wextra -Wpedantic)
+	# Pango is built against the vcpkg HarfBuzz; keep that ABI-compatible library
+	# ahead of older system copies even when LD_LIBRARY_PATH is set.
+	target_link_options(sdlbrowser PRIVATE "LINKER:--disable-new-dtags")
 endif()

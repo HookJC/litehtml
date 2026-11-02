@@ -58,6 +58,8 @@ string url_path_base_name(const string& path)
 
 string url_path_append(const string& base, const string& path)
 {
+    int    mod;
+    size_t npos;
     string result(base);
 
     // Only append a separator if both base and path are not empty and if the
@@ -67,6 +69,22 @@ string url_path_append(const string& base, const string& path)
     }
 
     result.append(path);
+
+    mod = 0;
+    while ((npos = result.find("/..")) != std::string::npos) {
+        mod++;
+        result = result.substr(0, npos) + result.substr(npos + sizeof("/..") - 1);
+        for (int i = npos - 1; i >= 0; i--) {
+            if (result.at(i) == '/') {
+                result = result.substr(0, i) + result.substr(npos);
+                break;
+            }
+        }
+    }
+
+    if (mod > 0 && result.back() != '/') {
+        result.append(1, '/');
+    }
 
     return result;
 }
