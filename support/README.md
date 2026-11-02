@@ -71,6 +71,37 @@ A set of classes to implement webpage handling:
 
 Please refer the gtkmm4 widget to find detailed information about using webpage classes.
 
+## [sdlbrowser] SDL2 Browser
+
+`sdlbrowser/` is a desktop browser example using SDL2 for the window and input loop.
+It reuses the `webpage/`, `draw_buffer/`, and Cairo/Pango container sources without
+depending on GTK or gtkmm.
+
+The default start page is `http://172.16.231.18:1080/`. To build with the SDL2
+dependencies installed in the requested vcpkg prefix:
+
+```sh
+VCPKG_ROOT="$HOME/vcpkg"
+"$VCPKG_ROOT/vcpkg" install sdl2 'sdl2-image[libjpeg-turbo]' cairo pango curl \
+  --triplet x64-linux-dynamic \
+  --overlay-triplets="$PWD/support/sdlbrowser/triplets" \
+  --recurse
+
+PKG_CONFIG_PATH="$VCPKG_ROOT/installed/x64-linux-dynamic/lib/pkgconfig" \
+cmake -S support/sdlbrowser -B outSdlBrowser \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$VCPKG_ROOT/installed/x64-linux-dynamic"
+cmake --build outSdlBrowser
+./outSdlBrowser/sdlbrowser
+```
+
+The local overlay triplet keeps vcpkg's requested `x64-linux-dynamic` install
+directory while building static libraries. Pass `-DLITEHTML_LIBRARY=...` and
+`-DLITEHTML_GUMBO_LIBRARY=...` to CMake if the existing litehtml archives are in
+different locations. SDL2, SDL2_image, Cairo, Pango, and libcurl are linked from
+static archives; transitive packages already present as shared libraries in the
+vcpkg prefix (for example OpenSSL, FreeType, and image codecs) remain shared.
+
 ### litebrowser::html_host_interface
 
 The interface to interact with widget or browser window. You have to implement all methods of this class and pass pointer to the ```litebrowser::web_page``` constructor.

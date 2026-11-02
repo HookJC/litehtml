@@ -21,6 +21,7 @@ _build32/
 _build64/
 *.inc
 .cache/
+out*
 
 # Test results
 *-FAILED.png
