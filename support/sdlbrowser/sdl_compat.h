@@ -20,7 +20,11 @@
 #endif
 #include <windows.h>
 
+#ifdef __cplusplus
 #include <cstdint>
+#else
+#include <stdint.h>
+#endif
 
 // POSIX fixed-width types used by http_request.h / web_page.h
 #ifndef u_int32_t

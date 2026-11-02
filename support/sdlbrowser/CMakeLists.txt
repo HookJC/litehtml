@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(sdlbrowser CXX)
+project(sdlbrowser C CXX)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -13,6 +13,11 @@ set(DIR_WEBPAGE   "${CMAKE_CURRENT_SOURCE_DIR}/../webpage")
 set(DIR_DRAWBUF   "${CMAKE_CURRENT_SOURCE_DIR}/../draw_buffer")
 set(DIR_CAIROCONT "${LITEHTML_ROOT}/containers/cairo")
 set(DIR_SELF      "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# Build litehtml itself from the in-repo sources (src/*.cpp + bundled gumbo C),
+# rather than linking the prebuilt litehtml.lib/gumbo.lib from the vcpkg tree.
+file(GLOB LITEHTML_CORE "${LITEHTML_ROOT}/src/*.cpp")
+file(GLOB GUMBO_SRC     "${LITEHTML_ROOT}/src/gumbo/*.c")
 
 # ---------------------------------------------------------------------------
 # C++ standard / static CRT
@@ -41,13 +46,23 @@ add_executable(sdlbrowser
     ${DIR_CAIROCONT}/container_cairo.cpp
     ${DIR_CAIROCONT}/cairo_borders.cpp
     ${DIR_CAIROCONT}/conic_gradient.cpp
+    # litehtml library built from in-repo source (not vcpkg litehtml.lib)
+    ${LITEHTML_CORE}
+    # bundled gumbo HTML parser (built from source, not vcpkg gumbo.lib)
+    ${GUMBO_SRC}
 )
 
 target_include_directories(sdlbrowser PRIVATE
     ${VCPKG_PREFIX}/include
     ${VCPKG_PREFIX}/include/cairo     # code uses <cairo.h>
-    ${VCPKG_PREFIX}/include/litehtml # code uses <litehtml.h>
     ${VCPKG_PREFIX}/include/SDL2     # code uses <SDL.h>
+    # litehtml built from in-repo sources: public headers, private src, gumbo
+    ${LITEHTML_ROOT}/include         # <litehtml.h>, <litehtml/...>
+    ${LITEHTML_ROOT}/include/litehtml # src/*.cpp include "html.h" etc. unprefixed
+    ${LITEHTML_ROOT}/src             # internal.h
+    ${LITEHTML_ROOT}/src/gumbo/include    # <gumbo.h>
+    ${LITEHTML_ROOT}/src/gumbo/include/gumbo # unprefixed "attribute.h" etc.
+    ${LITEHTML_ROOT}/src/gumbo/visualc/include # MSVC shim: strings.h
     ${DIR_SELF}
     ${DIR_WEBPAGE}
     ${DIR_DRAWBUF}
@@ -64,16 +79,16 @@ target_compile_definitions(sdlbrowser PRIVATE
 # Force-include the Windows compat shim so the shared (Linux-origin) support
 # sources compile unchanged on MSVC.
 if(MSVC)
-    target_compile_options(sdlbrowser PRIVATE /FI"${DIR_SELF}/sdl_compat.h" /utf-8)
+    # iso646.h: litehtml sources use C++ alternative tokens (and/or/not) which
+    # MSVC only recognizes after including <iso646.h>.
+    target_compile_options(sdlbrowser PRIVATE /FI"${DIR_SELF}/sdl_compat.h" /FIiso646.h /utf-8)
     set_target_properties(sdlbrowser PROPERTIES LINK_FLAGS "/MAP:${CMAKE_CURRENT_BINARY_DIR}/sdlbrowser.map")
 endif()
 
 target_link_directories(sdlbrowser PRIVATE ${VCPKG_PREFIX}/lib)
 
-# Static third-party libs
+# Static third-party libs (litehtml + gumbo are built from source above)
 target_link_libraries(sdlbrowser PRIVATE
-    litehtml.lib
-    gumbo.lib
     cairo.lib
     pixman-1.lib
     freetype.lib
