@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
 {
 	SDL_SetMainReady();
 
-	std::string url = (argc > 1) ? argv[1] : "http://172.16.231.18:1080/";
+	std::string url = (argc > 1) ? argv[1] : "http://www.litehtml.com/";
 
 	try
 	{
