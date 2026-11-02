@@ -1,4 +1,5 @@
 #include "http_requests_pool.h"
+#include <iostream>
 
 litebrowser::http_requests_pool::http_requests_pool(int pool_size, const std::function<void()>& cb_update_state) :
 			m_cancel(false),
@@ -91,7 +92,18 @@ void litebrowser::pool_thread::thread_loop()
 		{
 			m_pool->m_cb_update_state();
 		}
-		m_request->open();
+		try
+		{
+			m_request->open();
+		}
+		catch(const std::exception& ex)
+		{
+			std::cerr << "[pool_thread] std::exception: " << ex.what() << std::endl;
+		}
+		catch(...)
+		{
+			std::cerr << "[pool_thread] unknown exception" << std::endl;
+		}
 		{
 			std::unique_lock<std::mutex> request_lock(m_request_mutex);
 			m_request = nullptr;

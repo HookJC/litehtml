@@ -1,5 +1,6 @@
 #include <litehtml/url_path.h>
 #include <litehtml/url.h>
+#include <iostream>
 #include "web_page.h"
 
 void litebrowser::text_file::on_data(void* data, size_t len, size_t /*downloaded*/, size_t /*total*/)
@@ -220,6 +221,25 @@ void litebrowser::web_page::on_page_downloaded(std::shared_ptr<text_file> data,
 		m_html_source = ss.str();
 	}
 
+	// Drop external <link ...> tags. Loading remote stylesheets issues a sub-HTTP
+	// request re-entrantly from inside a pool worker, which deadlocks the requests
+	// pool (std::system_error EBUSY). This toy browser renders the HTML skeleton
+	// without remote CSS anyway.
+	{
+		std::string &h = m_html_source;
+		std::string out;
+		size_t p = 0;
+		while(p < h.size())
+		{
+			size_t lt = h.find("<link", p);
+			if(lt == std::string::npos){ out.append(h, p, h.size()-p); break; }
+			out.append(h, p, lt-p);
+			size_t gt = h.find(">", lt);
+			if(gt == std::string::npos) break;
+			p = gt+1;
+		}
+		m_html_source = out;
+	}
 	m_html = litehtml::document::createFromString(m_html_source, this);
 	if (m_html)
 	{
@@ -252,7 +272,11 @@ void litebrowser::web_page::on_image_downloaded(std::shared_ptr<image_file> data
 			}
 		}
 	}
+#ifdef _WIN32
+	::_unlink(data->path().c_str());
+#else
 	unlink(data->path().c_str());
+#endif
 }
 
 void litebrowser::web_page::load_image(const char *src, const char *baseurl, bool redraw_on_ready)
@@ -318,15 +342,32 @@ void litebrowser::image_file::on_data(void *data, size_t len, size_t /*downloade
 {
 	if(m_fd < 0)
 	{
+#ifdef _WIN32
+		char tmpDir[MAX_PATH] = {0};
+		char tmpName[MAX_PATH] = {0};
+		if(GetTempPathA(MAX_PATH, tmpDir) > 0 && GetTempFileNameA(tmpDir, "lhb", 0, tmpName) != 0)
+		{
+			m_fd = _open(tmpName, _O_WRONLY | _O_BINARY | _O_CREAT | _O_TRUNC, _S_IREAD | _S_IWRITE);
+			if(m_fd >= 0)
+			{
+				m_path = tmpName;
+			}
+		}
+#else
 		char nameBuff[] = "/tmp/litebrowser-XXXXXX";
 		m_fd = mkstemp(nameBuff);
 		if(m_fd >= 0)
 		{
 			m_path = nameBuff;
 		}
+#endif
 	}
 	if(m_fd >= 0)
 	{
-		write(m_fd, data, len);
+#ifdef _WIN32
+		::_write(m_fd, data, len);
+#else
+		::write(m_fd, data, len);
+#endif
 	}
 }

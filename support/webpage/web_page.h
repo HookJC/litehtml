@@ -2,10 +2,22 @@
 #define LITEBROWSER_WEB_PAGE_H
 
 #include <memory>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <sstream>
 #include <vector>
+
+// The cairo/pango container is the default (Linux/GTK builds). On Windows /
+// SDL2 builds we link a pango-free cairo toy-text container instead.
+#ifdef LITEHTML_SDLBROWSER_CAIRO_TOY
+#include "container_cairo_toy.h"
+#define LITEBROWSER_WEB_PAGE_BASE container_cairo_toy
+#else
 #include "container_cairo_pango.h"
+#define LITEBROWSER_WEB_PAGE_BASE container_cairo_pango
+#endif
+
 #include "html_host.h"
 #include "http_requests_pool.h"
 #include "cairo_images_cache.h"
@@ -48,7 +60,11 @@ namespace litebrowser
 		{
 			if(m_fd > 0)
 			{
+#ifdef _WIN32
+				::_close(m_fd);
+#else
 				::close(m_fd);
+#endif
 			}
 		}
 		[[nodiscard]]
@@ -61,7 +77,7 @@ namespace litebrowser
 		bool redraw_only() const { return m_redraw_on_ready; }
 	};
 
-	class web_page : 	public container_cairo_pango,
+	class web_page : 	public LITEBROWSER_WEB_PAGE_BASE,
 						public std::enable_shared_from_this<web_page>
 	{
 		litehtml::string				m_url;
