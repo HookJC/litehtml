@@ -1,5 +1,7 @@
 #include "sdl_html_widget.h"
 
+#include <SDL_image.h>
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -131,13 +133,44 @@ int sdl_html_widget::get_render_width()
 
 cairo_surface_t* sdl_html_widget::load_image(const std::string& path)
 {
-	cairo_surface_t* surf = cairo_image_surface_create_from_png(path.c_str());
-	if(cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS)
-	{
-		cairo_surface_destroy(surf);
-		return nullptr;
-	}
-	return surf;
+    SDL_Surface *decoded = IMG_Load(path.c_str());
+    if (!decoded) {
+        std::cerr << "Unable to load image " << path << ": " << IMG_GetError() << '\n';
+        return nullptr;
+    }
+    SDL_Surface *converted = SDL_ConvertSurfaceFormat(decoded, SDL_PIXELFORMAT_ARGB8888, 0);
+    SDL_FreeSurface(decoded);
+    if (!converted) {
+        std::cerr << "Unable to convert image " << path << ": " << SDL_GetError() << '\n';
+        return nullptr;
+    }
+
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, converted->w, converted->h);
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        SDL_FreeSurface(converted);
+        cairo_surface_destroy(surface);
+        return nullptr;
+    }
+    cairo_surface_flush(surface);
+    unsigned char *destination        = cairo_image_surface_get_data(surface);
+    const int      destination_stride = cairo_image_surface_get_stride(surface);
+    for (int row = 0; row < converted->h; ++row) {
+        const auto *source_row      = static_cast<const unsigned char *>(converted->pixels) + row * converted->pitch;
+        auto *      destination_row = destination + row * destination_stride;
+        for (int column = 0; column < converted->w; ++column) {
+            std::uint32_t pixel = 0;
+            std::memcpy(&pixel, source_row + column * 4, sizeof(pixel));
+            const std::uint32_t alpha         = pixel >> 24;
+            const std::uint32_t red           = ((pixel >> 16) & 0xff) * alpha / 255;
+            const std::uint32_t green         = ((pixel >> 8) & 0xff) * alpha / 255;
+            const std::uint32_t blue          = (pixel & 0xff) * alpha / 255;
+            const std::uint32_t premultiplied = (alpha << 24) | (red << 16) | (green << 8) | blue;
+            std::memcpy(destination_row + column * 4, &premultiplied, sizeof(premultiplied));
+        }
+    }
+    cairo_surface_mark_dirty(surface);
+    SDL_FreeSurface(converted);
+    return surface;
 }
 
 void sdl_html_widget::scroll_to(int x, int y)
@@ -336,6 +369,8 @@ void sdl_html_widget::present()
 	if(sw <= 0 || sh <= 0) return;
 	if(sw != m_tex_w || sh != m_tex_h) recreate_texture(sw, sh);
 
+	draw_scrollbars();
+
 	void* data  = cairo_image_surface_get_data(surf);
 	int   stride = cairo_image_surface_get_stride(surf);
 	if(data && stride > 0)
@@ -346,6 +381,58 @@ void sdl_html_widget::present()
 	SDL_RenderClear(m_renderer);
 	SDL_RenderCopy(m_renderer, m_texture, nullptr, nullptr);
 	SDL_RenderPresent(m_renderer);
+}
+
+void sdl_html_widget::draw_scrollbars()
+{
+	cairo_surface_t* surf = m_draw_buffer.get_cairo_surface();
+	if(!surf || cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) return;
+
+	auto page = current_page();
+	int vw = m_draw_buffer.get_width();
+	int vh = m_draw_buffer.get_height();
+	int doc_w = page ? page->width()  : vw;
+	int doc_h = page ? page->height() : vh;
+	if(vw <= 0 || vh <= 0) return;
+
+	cairo_t* cr = cairo_create(surf);
+	const int sw = 12;   // scrollbar thickness
+
+	// Vertical scrollbar
+	if(doc_h > vh)
+	{
+		cairo_set_source_rgba(cr, 0, 0, 0, 0.12);
+		cairo_rectangle(cr, (double) vw - sw, 0, sw, (double) vh);
+		cairo_fill(cr);
+
+		double thumb_h = (double) vh / doc_h * vh;
+		if(thumb_h < 20) thumb_h = 20;
+		double max_y = doc_h - vh;
+		double thumb_y = max_y > 0 ? m_scroll_y / max_y * (vh - thumb_h) : 0;
+
+		cairo_set_source_rgba(cr, 0.35, 0.35, 0.35, 0.7);
+		cairo_rectangle(cr, (double) vw - sw + 2, thumb_y, sw - 4, thumb_h);
+		cairo_fill(cr);
+	}
+
+	// Horizontal scrollbar
+	if(doc_w > vw)
+	{
+		cairo_set_source_rgba(cr, 0, 0, 0, 0.12);
+		cairo_rectangle(cr, 0, (double) vh - sw, (double) vw, sw);
+		cairo_fill(cr);
+
+		double thumb_w = (double) vw / doc_w * vw;
+		if(thumb_w < 20) thumb_w = 20;
+		double max_x = doc_w - vw;
+		double thumb_x = max_x > 0 ? m_scroll_x / max_x * (vw - thumb_w) : 0;
+
+		cairo_set_source_rgba(cr, 0.35, 0.35, 0.35, 0.7);
+		cairo_rectangle(cr, thumb_x, (double) vh - sw + 2, thumb_w, sw - 4);
+		cairo_fill(cr);
+	}
+
+	cairo_destroy(cr);
 }
 
 void sdl_html_widget::apply_scroll()

@@ -5,6 +5,8 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
+#include <condition_variable>
+#include <mutex>
 #include <sstream>
 #include <vector>
 
@@ -27,21 +29,26 @@ namespace litebrowser
 {
 	class text_file
 	{
-		std::mutex wait_mutex;
+		std::mutex m_mutex;
+		std::condition_variable m_cv;
 		std::stringstream stream;
 		bool data_ready = false;
+		bool m_finished = false;
 	public:
-		text_file()
-		{
-			wait_mutex.lock();
-		}
+		text_file() = default;
 
+		// Mark the download result as usable (main-page flow reads str() without
+		// waiting on a worker).
 		void set_ready() { data_ready = true; }
 
 		std::string str() const { return data_ready ? stream.str() : ""; }
+
+		// Block until the request completes (used by import_css, which is invoked
+		// synchronously from litehtml on the pool worker thread).
 		void wait()
 		{
-			wait_mutex.lock();
+			std::unique_lock<std::mutex> lock(m_mutex);
+			m_cv.wait(lock, [this]{ return m_finished; });
 		}
 		void on_data(void* data, size_t len, size_t downloaded, size_t total);
 		void on_page_downloaded(u_int32_t http_status, u_int32_t err_code, const std::string& err_text);

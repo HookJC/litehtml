@@ -53,6 +53,7 @@ private:
 	void resize(int w, int h);
 	void recreate_texture(int w, int h);
 	void present();
+	void draw_scrollbars();
 	void apply_scroll();
 	void update_view_port(std::shared_ptr<litebrowser::web_page> page);
 	void handle_event(const SDL_Event& ev);

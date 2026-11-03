@@ -102,6 +102,7 @@ target_link_libraries(sdlbrowser PRIVATE
     libexpatMT.lib
     libcurl.lib
     SDL2-static.lib
+    SDL2_image-static.lib
     pthreadVC3.lib
     # Windows system libs required by the static builds above
     user32.lib

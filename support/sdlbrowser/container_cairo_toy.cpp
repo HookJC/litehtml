@@ -63,7 +63,9 @@ namespace
 	{
 		cairo_text_extents_t te;
 		cairo_scaled_font_text_extents(sf, text, &te);
-		return te.width;
+		// Use the pen advance (not the ink bounding-box width): a space has zero
+		// ink width but a non-zero x_advance, otherwise words run together.
+		return te.x_advance;
 	}
 }
 
@@ -212,6 +214,14 @@ void container_cairo_toy::draw_text(litehtml::uint_ptr hdc, const char* text, li
 	cairo_set_source_rgba(cr, color.red / 255.0, color.green / 255.0, color.blue / 255.0, color.alpha / 255.0);
 	cairo_move_to(cr, (double) x, (double) y);
 	cairo_show_text(cr, text);
+	// The cairo toy font / freetype back-end does not reliably synthesize a bold
+	// face for the CJK fonts we resolve, so embolden by drawing the glyphs a
+	// second time with a sub-pixel horizontal offset.
+	if(f->weight == CAIRO_FONT_WEIGHT_BOLD)
+	{
+		cairo_move_to(cr, (double) x + 0.6, (double) y);
+		cairo_show_text(cr, text);
+	}
 
 	litehtml::web_color deco_color = f->decoration_color.is_current_color ? color : f->decoration_color;
 	litehtml::pixel_t tw = (litehtml::pixel_t) std::round(text_width_of(f->scaled, text));

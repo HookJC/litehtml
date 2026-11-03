@@ -12,14 +12,12 @@ void litebrowser::text_file::on_page_downloaded(u_int32_t http_status,
 												u_int32_t err_code,
 												const std::string &/*err_text*/)
 {
-	if(err_code == 0 && (http_status == 200 || http_status == 0))
 	{
-		data_ready = true;
-	} else
-	{
-		data_ready = false;
+		std::lock_guard<std::mutex> lock(m_mutex);
+		data_ready = (err_code == 0 && (http_status == 200 || http_status == 0));
+		m_finished = true;
 	}
-	wait_mutex.unlock();
+	m_cv.notify_all();
 }
 
 void litebrowser::web_page::open(const std::string &url, const std::string &fragment)
@@ -221,25 +219,6 @@ void litebrowser::web_page::on_page_downloaded(std::shared_ptr<text_file> data,
 		m_html_source = ss.str();
 	}
 
-	// Drop external <link ...> tags. Loading remote stylesheets issues a sub-HTTP
-	// request re-entrantly from inside a pool worker, which deadlocks the requests
-	// pool (std::system_error EBUSY). This toy browser renders the HTML skeleton
-	// without remote CSS anyway.
-	{
-		std::string &h = m_html_source;
-		std::string out;
-		size_t p = 0;
-		while(p < h.size())
-		{
-			size_t lt = h.find("<link", p);
-			if(lt == std::string::npos){ out.append(h, p, h.size()-p); break; }
-			out.append(h, p, lt-p);
-			size_t gt = h.find(">", lt);
-			if(gt == std::string::npos) break;
-			p = gt+1;
-		}
-		m_html_source = out;
-	}
 	m_html = litehtml::document::createFromString(m_html_source, this);
 	if (m_html)
 	{
